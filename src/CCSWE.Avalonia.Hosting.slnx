@@ -17,7 +17,6 @@
   </Folder>
   <Folder Name="/eng/GitHub Actions/">
     <File Path="../.github/workflows/dotnet-build-library.yml" />
-    <File Path="../.github/workflows/codeql.yml" />
     <File Path="../.github/dependabot.yml" />
   </Folder>
   <Folder Name="/src/">
