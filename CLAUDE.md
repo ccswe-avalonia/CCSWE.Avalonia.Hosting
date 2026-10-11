@@ -43,8 +43,9 @@ dotnet pack  src/CCSWE.Avalonia.Hosting.slnx -c Release -o artifacts
 
 Central Package Management (`src/Directory.Packages.props`); never put `Version=` on a `<PackageReference>`.
 Versioning via Nerdbank.GitVersioning (`version.json`); the major tracks the Avalonia major. CI
-(`.github/workflows/dotnet-build-publish-library.yml`) builds/tests/packs and publishes both packages to
-NuGet.org on `master`.
+(`.github/workflows/dotnet-build-library.yml` → `ccswe-apps/actions` `dotnet-build-library.yml`) builds/tests/packs;
+a `master` push that changes `src` (or `version.json`/`global.json`) publishes both packages to NuGet.org and
+sends `update-dependencies` to the `ccswe-apps` listeners.
 
 ## Coding standards
 

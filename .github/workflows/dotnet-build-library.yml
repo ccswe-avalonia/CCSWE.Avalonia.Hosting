@@ -1,0 +1,30 @@
+name: Build, test, and publish
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
+  checks: write
+  packages: write
+  pull-requests: read
+
+jobs:
+  # Keep the id: the required check is `pipeline / build`.
+  pipeline:
+    uses: ccswe-apps/actions/.github/workflows/dotnet-build-library.yml@master
+    with:
+      path: src
+      discover-dependents: |
+        ccswe-apps
+    secrets:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      AUTOMATION_APP_ID: ${{ secrets.AUTOMATION_APP_ID }}
+      AUTOMATION_APP_KEY: ${{ secrets.AUTOMATION_APP_KEY }}
