@@ -22,6 +22,6 @@ background services). Your `App` implements `IServiceProviderAccessor` (from `CC
 the built provider before `OnFrameworkInitializationCompleted`. All types share the `CCSWE.Avalonia.Hosting`
 namespace, so a single `using CCSWE.Avalonia.Hosting;` is all you need.
 
-See the [repository](https://github.com/CCSWE-Avalonia/CCSWE.Avalonia.Hosting) for full usage.
+See the [repository](https://github.com/ccswe-avalonia/CCSWE.Avalonia.Hosting) for full usage.
 
 MIT © Cory Charlton / CCSWE.

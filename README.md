@@ -1,6 +1,6 @@
 # CCSWE.Avalonia.Hosting
 
-[![Build](https://img.shields.io/github/actions/workflow/status/CCSWE-Avalonia/CCSWE.Avalonia.Hosting/dotnet-build-publish-library.yml?branch=master&label=build)](https://github.com/CCSWE-Avalonia/CCSWE.Avalonia.Hosting/actions/workflows/dotnet-build-publish-library.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/ccswe-avalonia/CCSWE.Avalonia.Hosting/dotnet-build-publish-library.yml?branch=master&label=build)](https://github.com/ccswe-avalonia/CCSWE.Avalonia.Hosting/actions/workflows/dotnet-build-publish-library.yml)
 [![NuGet](https://img.shields.io/nuget/v/CCSWE.Avalonia.Hosting.Desktop.svg)](https://www.nuget.org/packages/CCSWE.Avalonia.Hosting.Desktop)
 [![Downloads](https://img.shields.io/nuget/dt/CCSWE.Avalonia.Hosting.Desktop.svg)](https://www.nuget.org/packages/CCSWE.Avalonia.Hosting.Desktop)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)

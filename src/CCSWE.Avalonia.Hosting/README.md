@@ -8,6 +8,6 @@ built `IServiceProvider` before `OnFrameworkInitializationCompleted`.
 For desktop apps, use **[CCSWE.Avalonia.Hosting.Desktop](https://www.nuget.org/packages/CCSWE.Avalonia.Hosting.Desktop)**,
 which provides `DesktopApplication.CreateBuilder<TApp>(args).Build().Run(args)`.
 
-See the [repository](https://github.com/CCSWE-Avalonia/CCSWE.Avalonia.Hosting) for full usage.
+See the [repository](https://github.com/ccswe-avalonia/CCSWE.Avalonia.Hosting) for full usage.
 
 MIT © Cory Charlton / CCSWE.

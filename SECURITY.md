@@ -17,7 +17,7 @@ Please report security issues **privately** — do not open a public issue or PR
 
 Use GitHub's private vulnerability reporting: open the repository's **Security** tab
 and choose **Report a vulnerability**, or go directly to
-<https://github.com/CCSWE-Avalonia/CCSWE.Avalonia.Hosting/security/advisories/new>.
+<https://github.com/ccswe-avalonia/CCSWE.Avalonia.Hosting/security/advisories/new>.
 
 Please include enough detail to reproduce — the affected version, a description of
 the issue, and a proof of concept or steps if possible.
