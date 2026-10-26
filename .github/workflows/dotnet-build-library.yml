@@ -19,7 +19,7 @@ permissions:
 jobs:
   # Keep the id: the required check is `pipeline / build`.
   pipeline:
-    uses: ccswe-apps/actions/.github/workflows/dotnet-build-library.yml@dotnet-trusted-publishing
+    uses: ccswe-apps/actions/.github/workflows/dotnet-build-library.yml@master
     with:
       nuget-org: true
       path: src
@@ -42,7 +42,7 @@ jobs:
       indexed: ${{ steps.publish.outputs.indexed }}
     steps:
       - id: publish
-        uses: ccswe-apps/actions/.github/actions/nuget-org-publish@dotnet-trusted-publishing
+        uses: ccswe-apps/actions/.github/actions/nuget-org-publish@master
         with:
           user: CoryCharlton
           packages: ${{ needs.pipeline.outputs.packages }}
@@ -54,7 +54,7 @@ jobs:
     if: ${{ !cancelled() && needs.pipeline.result == 'success' && needs.pipeline.outputs.owners != '' }}
     permissions:
       contents: read
-    uses: ccswe-apps/actions/.github/workflows/dispatch-dependents.yml@dotnet-trusted-publishing
+    uses: ccswe-apps/actions/.github/workflows/dispatch-dependents.yml@master
     with:
       owners: ${{ needs.pipeline.outputs.owners }}
       updater: ccswe-apps/actions/.github/workflows/dotnet-update-dependencies.yml
@@ -65,15 +65,3 @@ jobs:
     secrets:
       AUTOMATION_APP_ID: ${{ secrets.AUTOMATION_APP_ID }}
       AUTOMATION_APP_KEY: ${{ secrets.AUTOMATION_APP_KEY }}
-
-  # TEMPORARY (drop before merge): proves the nuget.org policy matches without publishing.
-  tp-check:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      id-token: write
-    steps:
-      - uses: NuGet/login@v1
-        with:
-          user: CoryCharlton
