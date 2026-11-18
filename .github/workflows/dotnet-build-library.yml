@@ -19,7 +19,7 @@ permissions:
 jobs:
   # Keep the id: the required check is `pipeline / build`.
   pipeline:
-    uses: ccswe-apps/actions/.github/workflows/dotnet-build-library.yml@master
+    uses: ccswe-apps/actions/.github/workflows/dotnet-build-library.yml@dotnet-sdk-version
     with:
       nuget-org: true
       path: src
