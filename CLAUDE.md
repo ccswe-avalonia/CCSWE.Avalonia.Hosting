@@ -25,9 +25,14 @@ differ fundamentally (the OS owns the loop), so they are **not** generalized int
 
 ## Lifecycle design (don't regress)
 
-`DesktopApplication.Run()`: `host.Start()` (non-blocking; starts hosted services) → configured `AppBuilder`
-`.AfterSetup(inject provider)` → `StartWithClassicDesktopLifetime` (blocks) → `StopHost`: `host.StopAsync()` then
-always `Dispose()`. If startup or the UI loop threw, a stop failure is logged and the original exception propagates;
+`DesktopApplication.Run()`, in this order (each step is load-bearing):
+resolve `IHostApplicationLifetime` and register `ApplicationStopping` → `HostStopBridge.RequestStop` → `host.Start()`
+(non-blocking; an `OperationCanceledException` while stopping, or a stop during startup, skips the UI and returns 0) →
+configured `AppBuilder` `.AfterSetup(inject provider; Attach the bridge to Dispatcher.UIThread, Post at Send)` →
+`StartWithClassicDesktopLifetime(args, lifetime builder)` (blocks) → `Detach` the bridge → `StopHost`: `host.StopAsync()`
+then always `Dispose()`. The bridge turns any host stop (Ctrl+C/SIGTERM via ConsoleLifetime, `StopApplication()`, a
+faulted `BackgroundService`) into a forced `Shutdown()` of the UI. It only posts, never invokes (`StopApplication` holds
+a lock while its callbacks run), and `Dispatcher.UIThread` is first touched in `AfterSetup`, on the UI thread. If startup or the UI loop threw, a stop failure is logged and the original exception propagates;
 after a normal exit a stop failure (a hosted service failing to stop or, from Microsoft.Extensions.Hosting 11, a faulted
 `BackgroundService`) propagates from `Run()`. The `AfterSetup` callback runs after the app is constructed + `Initialize()` but before
 `OnFrameworkInitializationCompleted`, so the provider is set in time. `Run()` is one-shot (Interlocked guard);
@@ -47,7 +52,9 @@ dotnet tool restore && dotnet validate package local artifacts/*.nupkg   # Sourc
 Central Package Management (`src/Directory.Packages.props`); never put `Version=` on a `<PackageReference>`.
 `Microsoft.Extensions.*` stays on the TFM's .NET major (10): Hosting.Desktop's packed version is every consumer's
 minimum, so majors move with the TFM and Dependabot ignores them. Source Link comes from the SDK (no package).
-Versioning via Nerdbank.GitVersioning (`version.json`); the major tracks the Avalonia major. CI
+Versioning via Nerdbank.GitVersioning (`version.json`); the major tracks the Avalonia major; minor/patch are the
+library's own, not Avalonia's. Hosting.Desktop references only `Avalonia.Desktop` (Avalonia comes through it), so the
+platform packages can't resolve to a different version than `Avalonia`. CI
 (`.github/workflows/dotnet-build-library.yml` → `ccswe-apps/actions` `dotnet-build-library.yml`, `validate-packages: true`)
 builds/tests/packs/validates;
 a `master` push that changes `src` (or `version.json`/`global.json`) publishes both packages to NuGet.org and
@@ -83,4 +90,4 @@ NUnit, Moq for mocking (mock `ILogger` with a logger fake rather than raw setups
 (no `// Arrange` comments). Test projects sit **physically under `src/`**
 (no on-disk `tests/` folder) and appear under a `/tests/` solution folder; named `<ProjectUnderTest>.UnitTests`.
 Tests stay off the UI thread (`Run()` only with a throwing AppBuilder factory, which never reaches the desktop lifetime);
-cover options/builder/host wiring.
+cover options/builder/host wiring. `HostStopBridge` holds the host-stop → UI shutdown logic, tested without a UI.

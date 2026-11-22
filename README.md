@@ -24,8 +24,13 @@ public static AppBuilder BuildAvaloniaApp() => DesktopApplication.ConfigureAppBu
 ```
 
 `Run()` starts the hosted services, runs the Avalonia classic-desktop main loop, and stops the host on exit
-(cancelling background services) — the correct lifecycle, by construction. Your `App` receives the built
-provider by implementing `IServiceProviderAccessor`:
+(cancelling background services) — the correct lifecycle, by construction. When the host stops while the UI runs — Ctrl+C or SIGTERM, `IHostApplicationLifetime.StopApplication()`, or a
+`BackgroundService` that throws (the default `BackgroundServiceExceptionBehavior.StopHost`; set it to `Ignore` to keep
+the app running) — `Run()` closes the UI with a forced shutdown. `DesktopApplicationOptions.SuppressStatusMessages`
+(default `true`) hides the console lifetime's "Press Ctrl+C to shut down." status lines. Reference `Avalonia.Desktop`
+at the same version as `Avalonia`; Avalonia's platform packages aren't compatible across versions.
+
+Your `App` receives the built provider by implementing `IServiceProviderAccessor`:
 
 ```csharp
 public partial class App : Application, IServiceProviderAccessor

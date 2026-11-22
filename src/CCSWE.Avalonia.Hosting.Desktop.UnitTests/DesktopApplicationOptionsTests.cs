@@ -20,6 +20,7 @@ public class DesktopApplicationOptionsTests
                 Assert.That(options.LogToTrace, Is.True);
                 Assert.That(options.UsePlatformDetect, Is.True);
                 Assert.That(options.ShutdownMode, Is.EqualTo(ShutdownMode.OnLastWindowClose));
+                Assert.That(options.SuppressStatusMessages, Is.True);
                 Assert.That(options.Win32PlatformOptions, Is.Null);
             });
         }

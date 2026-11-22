@@ -3,6 +3,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using NUnit.Framework;
 
@@ -11,11 +14,14 @@ namespace CCSWE.Avalonia.Hosting.Desktop.UnitTests;
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 public class DesktopApplicationTests
 {
-    // A host whose StopAsync throws, as Microsoft.Extensions.Hosting does when a hosted service fails to stop.
-    private static Mock<IHost> CreateHost(Exception? stopException = null)
+    // A host with a real application lifetime. With stopException, StopAsync throws, as Microsoft.Extensions.Hosting
+    // does when a hosted service fails to stop.
+    private static Mock<IHost> CreateHost(Exception? stopException = null) => CreateHost(new ApplicationLifetime(NullLogger<ApplicationLifetime>.Instance), stopException);
+
+    private static Mock<IHost> CreateHost(ApplicationLifetime lifetime, Exception? stopException = null)
     {
         var host = new Mock<IHost>();
-        host.Setup(h => h.Services).Returns(new ServiceCollection().BuildServiceProvider());
+        host.Setup(h => h.Services).Returns(new ServiceCollection().AddSingleton<IHostApplicationLifetime>(lifetime).BuildServiceProvider());
 
         if (stopException is not null)
         {
@@ -33,6 +39,28 @@ public class DesktopApplicationTests
             var builder = DesktopApplication.CreateBuilder<TestApp>([]);
 
             Assert.That(builder.Services, Is.Not.Null);
+        }
+
+        [Test]
+        public void It_suppresses_console_status_messages_by_default()
+        {
+            var application = DesktopApplication.CreateBuilder<TestApp>([]).Build();
+
+            var options = application.Services.GetRequiredService<IOptions<ConsoleLifetimeOptions>>().Value;
+
+            Assert.That(options.SuppressStatusMessages, Is.True);
+            application.Host.Dispose();
+        }
+
+        [Test]
+        public void It_keeps_console_status_messages_when_opted_out()
+        {
+            var application = DesktopApplication.CreateBuilder<TestApp>([], options => options.SuppressStatusMessages = false).Build();
+
+            var options = application.Services.GetRequiredService<IOptions<ConsoleLifetimeOptions>>().Value;
+
+            Assert.That(options.SuppressStatusMessages, Is.False);
+            application.Host.Dispose();
         }
 
         [Test]
@@ -72,6 +100,34 @@ public class DesktopApplicationTests
             var exception = Assert.Throws<InvalidOperationException>(() => application.Run([]));
 
             Assert.That(exception, Is.SameAs(startupException));
+            host.Verify(h => h.Dispose(), Times.Once());
+        }
+
+        [Test]
+        public void It_skips_the_UI_when_the_host_stops_during_startup()
+        {
+            var lifetime = new ApplicationLifetime(NullLogger<ApplicationLifetime>.Instance);
+            var host = CreateHost(lifetime);
+            host.Setup(h => h.StartAsync(It.IsAny<CancellationToken>())).Callback(lifetime.StopApplication).Returns(Task.CompletedTask);
+            var application = new DesktopApplication(host.Object, () => throw new AssertionException("The UI must not start."), ShutdownMode.OnLastWindowClose);
+
+            var exitCode = application.Run([]);
+
+            Assert.That(exitCode, Is.Zero);
+            host.Verify(h => h.Dispose(), Times.Once());
+        }
+
+        [Test]
+        public void It_skips_the_UI_when_startup_is_cancelled_by_a_stop()
+        {
+            var lifetime = new ApplicationLifetime(NullLogger<ApplicationLifetime>.Instance);
+            var host = CreateHost(lifetime);
+            host.Setup(h => h.StartAsync(It.IsAny<CancellationToken>())).Callback(lifetime.StopApplication).ThrowsAsync(new OperationCanceledException());
+            var application = new DesktopApplication(host.Object, () => throw new AssertionException("The UI must not start."), ShutdownMode.OnLastWindowClose);
+
+            var exitCode = application.Run([]);
+
+            Assert.That(exitCode, Is.Zero);
             host.Verify(h => h.Dispose(), Times.Once());
         }
     }
