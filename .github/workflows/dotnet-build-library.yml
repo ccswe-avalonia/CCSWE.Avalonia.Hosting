@@ -23,6 +23,7 @@ jobs:
     with:
       nuget-org: true
       path: src
+      validate-packages: true
       discover-dependents: |
         ccswe-apps
     secrets:

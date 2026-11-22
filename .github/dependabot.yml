@@ -3,6 +3,7 @@ updates:
   - package-ecosystem: nuget
     directories:
       - /src
+      - /.config
     schedule:
       interval: weekly
       day: monday
@@ -12,6 +13,10 @@ updates:
       default-days: 3
       exclude:
         - "CCSWE.*"
+    ignore:
+      # Follows the .NET major (net10.0); see CLAUDE.md.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
     groups:
       nuget-minor-patch:
         update-types: [minor, patch]
