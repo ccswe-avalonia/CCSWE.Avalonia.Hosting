@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -11,7 +13,7 @@ namespace CCSWE.Avalonia.Hosting;
 /// <summary>
 /// A runnable desktop application that owns a Generic <see cref="IHost"/> and an Avalonia classic-desktop
 /// lifetime. <see cref="Run"/> starts the hosted services, runs the Avalonia main loop until the application
-/// exits, then stops the host. Create one with
+/// exits or the host stops, then stops the host. Create one with
 /// <see cref="CreateBuilder{TApp}(string[], Action{DesktopApplicationOptions})"/> and
 /// <see cref="DesktopApplicationBuilder.Build"/>.
 /// </summary>
@@ -71,7 +73,19 @@ public sealed partial class DesktopApplication
             hostBuilder.Logging.ClearProviders();
         }
 
+        if (options.SuppressStatusMessages)
+        {
+            hostBuilder.Services.Configure<ConsoleLifetimeOptions>(consoleOptions => consoleOptions.SuppressStatusMessages = true);
+        }
+
         return new DesktopApplicationBuilder(hostBuilder, () => options.Apply(AppBuilder.Configure<TApp>()), options.ShutdownMode);
+    }
+
+    // StopHost raises ApplicationStopping again; the UI has exited, so stop listening first.
+    private static void DetachHostStop(CancellationTokenRegistration registration, HostStopBridge bridge)
+    {
+        registration.Dispose();
+        bridge.Detach();
     }
 
     // Hands the built provider to the application instance. A soft contract: an app that doesn't implement
@@ -92,14 +106,23 @@ public sealed partial class DesktopApplication
 
     /// <summary>
     /// Runs the application: starts the hosted services (non-blocking), runs the Avalonia classic-desktop main
-    /// loop (blocking) until the last window closes or shutdown is requested, then stops the host gracefully
-    /// (cancelling background services). This is the one call a typical <c>Program.Main</c> needs.
+    /// loop (blocking) until the last window closes, shutdown is requested or the host stops, then stops the host
+    /// gracefully (cancelling background services). This is the one call a typical <c>Program.Main</c> needs.
     /// </summary>
     /// <returns>The Avalonia process exit code.</returns>
     /// <exception cref="InvalidOperationException">The application has already been run.</exception>
-    /// <remarks>The host is always stopped and disposed. If startup or the UI loop throws, that exception propagates
-    /// and a failure to stop the host is only logged. After a normal exit, a failure to stop the host (a hosted service
-    /// failing to stop or, from Microsoft.Extensions.Hosting 11, a faulted <c>BackgroundService</c>) propagates.</remarks>
+    /// <remarks>
+    /// <para>When the host stops while the UI runs (Ctrl+C or SIGTERM through the console lifetime,
+    /// <c>IHostApplicationLifetime.StopApplication()</c>, or a faulted <c>BackgroundService</c> under the default
+    /// <c>BackgroundServiceExceptionBehavior.StopHost</c>), the UI is shut down with a forced shutdown:
+    /// <c>ShutdownRequested</c> isn't raised and window <c>Closing</c> handlers can't cancel it.
+    /// <c>StopApplication()</c> is therefore also the way to quit an app that uses
+    /// <c>ShutdownMode.OnExplicitShutdown</c>. If the host stops during startup, the UI isn't started.</para>
+    /// <para>The host is always stopped and disposed. If startup or the UI loop throws, that exception propagates
+    /// and a failure to stop the host is only logged. After a normal exit, a failure to stop the host (a hosted
+    /// service failing to stop or, from Microsoft.Extensions.Hosting 11, a faulted <c>BackgroundService</c>)
+    /// propagates.</para>
+    /// </remarks>
     public int Run(string[] args)
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
@@ -107,24 +130,58 @@ public sealed partial class DesktopApplication
             throw new InvalidOperationException($"{nameof(DesktopApplication)} has already been run.");
         }
 
+        IClassicDesktopStyleApplicationLifetime? desktopLifetime = null;
+        var bridge = new HostStopBridge(() => desktopLifetime?.Shutdown());
+        var registration = default(CancellationTokenRegistration);
         int exitCode;
         try
         {
-            // Non-blocking: runs each IHostedService.StartAsync and kicks off BackgroundService.ExecuteAsync.
-            _host.Start();
+            // Registered before Start, so a stop during startup (or a fault right after it) is never missed.
+            var stopping = _host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping;
+            registration = stopping.Register(bridge.RequestStop);
 
-            // AfterSetup runs after TApp is constructed + Initialize(), before OnFrameworkInitializationCompleted,
-            // so the provider is set in time. StartWithClassicDesktopLifetime then blocks for the UI session.
-            exitCode = _appBuilderFactory()
-                .AfterSetup(builder => InjectServices(builder.Instance))
-                .StartWithClassicDesktopLifetime(args, _shutdownMode);
+            try
+            {
+                // Non-blocking: runs each IHostedService.StartAsync and kicks off BackgroundService.ExecuteAsync.
+                _host.Start();
+            }
+            catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+            {
+                // The host stopped during startup (StartAsync links ApplicationStopping into its token).
+            }
+
+            if (stopping.IsCancellationRequested)
+            {
+                exitCode = 0;
+            }
+            else
+            {
+                // AfterSetup runs on this thread after TApp is constructed + Initialize(), before
+                // OnFrameworkInitializationCompleted, so the provider is set in time. Dispatcher.UIThread is only
+                // touched here: touching it first from another thread would make that thread the UI thread.
+                // StartWithClassicDesktopLifetime then blocks for the UI session.
+                exitCode = _appBuilderFactory()
+                    .AfterSetup(builder =>
+                    {
+                        InjectServices(builder.Instance);
+                        var dispatcher = Dispatcher.UIThread;
+                        bridge.Attach(action => dispatcher.Post(action, DispatcherPriority.Send));
+                    })
+                    .StartWithClassicDesktopLifetime(args, lifetime =>
+                    {
+                        lifetime.ShutdownMode = _shutdownMode;
+                        desktopLifetime = lifetime;
+                    });
+            }
         }
         catch
         {
+            DetachHostStop(registration, bridge);
             StopHost(rethrow: false);
             throw;
         }
 
+        DetachHostStop(registration, bridge);
         StopHost(rethrow: true);
         return exitCode;
     }

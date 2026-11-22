@@ -25,6 +25,11 @@ public sealed class DesktopApplicationOptions
     /// <see cref="ShutdownMode"/>.<c>OnLastWindowClose</c>.</summary>
     public ShutdownMode ShutdownMode { get; set; } = ShutdownMode.OnLastWindowClose;
 
+    /// <summary>Suppress the console lifetime's status messages ("Application started. Press Ctrl+C to shut down.",
+    /// the hosting environment and content root, "Application is shutting down..."), which are noise for a GUI.
+    /// Ctrl+C / SIGTERM handling is unaffected. Default <see langword="true"/>.</summary>
+    public bool SuppressStatusMessages { get; set; } = true;
+
     /// <summary>Call <c>UsePlatformDetect()</c> on the app builder. Default <see langword="true"/>.</summary>
     public bool UsePlatformDetect { get; set; } = true;
 
