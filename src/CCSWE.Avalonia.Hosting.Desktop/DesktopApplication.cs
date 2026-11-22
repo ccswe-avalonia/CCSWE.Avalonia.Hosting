@@ -96,6 +96,10 @@ public sealed partial class DesktopApplication
     /// (cancelling background services). This is the one call a typical <c>Program.Main</c> needs.
     /// </summary>
     /// <returns>The Avalonia process exit code.</returns>
+    /// <exception cref="InvalidOperationException">The application has already been run.</exception>
+    /// <remarks>The host is always stopped and disposed. If startup or the UI loop throws, that exception propagates
+    /// and a failure to stop the host is only logged. After a normal exit, a failure to stop the host (a hosted service
+    /// failing to stop or, from Microsoft.Extensions.Hosting 11, a faulted <c>BackgroundService</c>) propagates.</remarks>
     public int Run(string[] args)
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
@@ -103,6 +107,7 @@ public sealed partial class DesktopApplication
             throw new InvalidOperationException($"{nameof(DesktopApplication)} has already been run.");
         }
 
+        int exitCode;
         try
         {
             // Non-blocking: runs each IHostedService.StartAsync and kicks off BackgroundService.ExecuteAsync.
@@ -110,16 +115,74 @@ public sealed partial class DesktopApplication
 
             // AfterSetup runs after TApp is constructed + Initialize(), before OnFrameworkInitializationCompleted,
             // so the provider is set in time. StartWithClassicDesktopLifetime then blocks for the UI session.
-            return _appBuilderFactory()
+            exitCode = _appBuilderFactory()
                 .AfterSetup(builder => InjectServices(builder.Instance))
                 .StartWithClassicDesktopLifetime(args, _shutdownMode);
         }
+        catch
+        {
+            StopHost(rethrow: false);
+            throw;
+        }
+
+        StopHost(rethrow: true);
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Stops the host (cancelling background services) and always disposes it. With <paramref name="rethrow"/>, a
+    /// failure to stop propagates; without it (an exception is already propagating), the failure is logged and
+    /// swallowed so it can't replace the original exception.
+    /// </summary>
+    internal void StopHost(bool rethrow)
+    {
+        try
+        {
+            _host.StopAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception exception) when (!rethrow)
+        {
+            TryLogStopFailure(exception);
+        }
         finally
         {
-            // Always stop + dispose, even if startup or the UI loop threw, so background services are cancelled
-            // and nothing leaks. StopAsync tolerates a host that never fully started.
-            _host.StopAsync().GetAwaiter().GetResult();
+            if (rethrow)
+            {
+                _host.Dispose();
+            }
+            else
+            {
+                TryDisposeHost();
+            }
+        }
+    }
+
+    // Used only while another exception propagates: nothing here may throw.
+    private void TryDisposeHost()
+    {
+        try
+        {
             _host.Dispose();
+        }
+        catch (Exception exception)
+        {
+            TryLogStopFailure(exception);
+        }
+    }
+
+    // Used only while another exception propagates: nothing here may throw.
+    private void TryLogStopFailure(Exception exception)
+    {
+        try
+        {
+            if (_host.Services?.GetService<ILogger<DesktopApplication>>() is { } logger)
+            {
+                Log.StopFailed(logger, exception);
+            }
+        }
+        catch
+        {
+            // The host's logging may be unusable after a failed stop; the original exception matters more.
         }
     }
 
@@ -128,5 +191,8 @@ public sealed partial class DesktopApplication
     {
         [LoggerMessage(1, LogLevel.Warning, "{Application} does not implement {Interface}; the service provider was not injected", EventName = "ServiceProviderNotInjected")]
         public static partial void ServiceProviderNotInjected(ILogger logger, string application, string @interface);
+
+        [LoggerMessage(2, LogLevel.Error, "Stopping the host failed while another exception was propagating", EventName = "StopFailed")]
+        public static partial void StopFailed(ILogger logger, Exception exception);
     }
 }
